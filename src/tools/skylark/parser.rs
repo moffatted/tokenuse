@@ -17,6 +17,13 @@
 //!   on every record precisely so the same call is not counted twice, and
 //!   this adapter uses that key verbatim. Deriving our own would defeat the
 //!   field's only purpose.
+//! - **Only an exact count may carry a figure.** A record whose
+//!   `tokenQuality` is `estimated` or `absent` may carry a recorded zero and
+//!   nothing else; a figure beside a count nobody reported is an estimate
+//!   becoming money, and this adapter refuses the line rather than totalling
+//!   it. The producer refuses it too, which is the point — two independently
+//!   released repositories agreeing because both enforce the rule, not
+//!   because neither was ever handed a row that breaks it.
 //! - **A null cost is not a zero cost.** Skylark prices at import time from a
 //!   dated table and writes `costUsd` as a fixed-point decimal *string*, so a
 //!   consumer does not read money back as a binary float. A record it could
@@ -229,7 +236,20 @@ fn parse_usage(value: &serde_json::Value) -> Option<SkylarkRecord> {
         // the producer never has to serialise money as a JSON number. The
         // `f64` is this repository's own representation and its own
         // rounding; the exact figure stays on the record Skylark wrote.
-        Some(raw) => Some(raw.trim().parse::<f64>().ok()?),
+        Some(raw) => {
+            let parsed = raw.trim().parse::<f64>().ok()?;
+            // The producer's central integrity rule, mirrored rather than
+            // trusted. A row whose counts are not `exact` may carry a
+            // recorded zero — zero multiplied by an unknown count is still
+            // zero, which is what the self-hosted lanes legitimately cost —
+            // and may never carry a figure. Skylark's own validator refuses
+            // the pairing; a consumer more forgiving on *this* rule is a
+            // consumer that puts an estimate in a spend column.
+            if token_quality != TokenQuality::Exact && parsed != 0.0 {
+                return None;
+            }
+            Some(parsed)
+        }
         None => None,
     };
     let pricing_version = as_opt_str(payload.get("pricingVersion"))?.map(str::to_string);
@@ -816,6 +836,50 @@ mod tests {
             parse_export(&tampered).skipped_lines,
             1,
             "a figure without the table that produced it asserts a provenance it does not have"
+        );
+    }
+
+    /// The producing repository's central integrity rule, mirrored here.
+    ///
+    /// Skylark's own validator refuses a row whose `tokenQuality` is not
+    /// `exact` and whose `costUsd` is a figure rather than a recorded zero,
+    /// because zero multiplied by an unknown count is still zero and anything
+    /// else is an estimate becoming money. This adapter has to refuse it too:
+    /// a consumer more forgiving than the contract on *this* rule is a
+    /// consumer that puts the estimate in a spend column, which is precisely
+    /// the outcome the contract exists to prevent.
+    #[test]
+    fn a_non_exact_row_carrying_a_figure_is_refused_while_its_recorded_zero_is_kept() {
+        let zero_line = CONFORMANCE_FIXTURE
+            .lines()
+            .find(|l| {
+                l.contains("\"tokenQuality\":\"absent\"") && l.contains("\"costUsd\":\"0.000000\"")
+            })
+            .expect("the fixture carries a non-exact row priced at a recorded zero");
+        let parsed = parse_export(zero_line);
+        assert_eq!(
+            parsed.skipped_lines, 0,
+            "a recorded zero is a rate that actually applied"
+        );
+        assert_eq!(parsed.records[0].cost_usd, Some(0.0));
+
+        let mut value: serde_json::Value = serde_json::from_str(zero_line).expect("JSON");
+        value["event"]["payload"]["costUsd"] = serde_json::Value::from("99.000000");
+        let tampered = serde_json::to_string(&value).expect("re-serialises");
+        let parsed = parse_export(&tampered);
+        assert_eq!(
+            parsed.skipped_lines, 1,
+            "a count nobody reported cannot be multiplied into money, so a figure beside one \
+             is not a record this adapter may total"
+        );
+        assert!(parsed.records.is_empty());
+
+        value["event"]["payload"]["tokenQuality"] = serde_json::Value::from("estimated");
+        let tampered = serde_json::to_string(&value).expect("re-serialises");
+        assert_eq!(
+            parse_export(&tampered).skipped_lines,
+            1,
+            "an estimate least of all"
         );
     }
 }

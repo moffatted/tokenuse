@@ -469,6 +469,7 @@
     "codex": "Codex",
     "copilot": "Copilot",
     "gemini": "Gemini",
+    "skylark": "Skylark",
     "sample": "Sample"
   },
   "metrics": {

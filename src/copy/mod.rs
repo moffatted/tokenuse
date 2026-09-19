@@ -395,6 +395,7 @@ pub struct ToolCopy {
     pub codex: String,
     pub copilot: String,
     pub gemini: String,
+    pub skylark: String,
     pub sample: String,
 }
 

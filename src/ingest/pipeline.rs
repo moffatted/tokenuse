@@ -534,6 +534,7 @@ pub(crate) fn matches_tool(call: &ParsedCall, tool: Tool) -> bool {
         Tool::Codex => call.tool == "codex",
         Tool::Copilot => call.tool == "copilot",
         Tool::Gemini => call.tool == "gemini",
+        Tool::Skylark => call.tool == "skylark",
     }
 }
 

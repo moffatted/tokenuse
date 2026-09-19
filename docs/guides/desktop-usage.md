@@ -25,7 +25,7 @@ The desktop app uses a persistent left sidebar rather than the TUI tab strip. Ev
 - Models
 - Projects
 - Tools
-- Claude Code, Cursor, Codex, Copilot, and Gemini
+- Claude Code, Cursor, Codex, Copilot, Gemini, and Skylark
 - Config
 
 Use **Collapse** at the bottom of the sidebar to reduce it to an icon rail. The choice is remembered locally. The active screen remains highlighted in either state.

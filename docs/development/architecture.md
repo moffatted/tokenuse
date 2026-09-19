@@ -51,7 +51,7 @@ Every adapter emits `ParsedCall` from `src/tools/types.rs`. The important fields
 
 | Field | Meaning |
 | --- | --- |
-| `tool` | Stable internal tool id such as `claude-code`, `cursor`, `codex`, `copilot`, or `gemini` |
+| `tool` | Stable internal tool id such as `claude-code`, `cursor`, `codex`, `copilot`, `gemini`, or `skylark` |
 | `model` | Raw or inferred model name before display shortening |
 | `input_tokens`, `output_tokens` | Billable input/output buckets after adapter-specific normalization |
 | `cache_creation_input_tokens`, `cache_read_input_tokens` | Cache write/read buckets when the tool exposes them |
@@ -275,6 +275,7 @@ A single shared `HashSet<String>` is passed through every adapter during a run. 
 - Codex: session lineage (the fork parent's session id when forked, else the session's own id) plus the cumulative token breakdown, so forked rollouts that replay parent history collide instead of double counting
 - Copilot: session id and message id
 - Gemini: session id and message id
+- Skylark: the producer's own `skylark:<trace_id>:<sequence>` key, used verbatim rather than re-derived
 
 Session counts are tool-qualified, so `claude-code:s1` and `codex:s1` remain separate sessions even if the raw session id text matches.
 

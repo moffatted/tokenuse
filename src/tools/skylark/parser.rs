@@ -74,7 +74,18 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// copies the same file: a byte that moves in either fails that repository's
 /// own suite rather than quietly producing two parsers that agree about
 /// nothing.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "895b289153417154";
+///
+/// Moved from `895b289153417154` at Skylark's Phase 46 Week 106 close. The
+/// fixture's four non-null `pricingVersion` values had recorded
+/// `2026-06-24+1f4c9a70` since the commit that wrote them, which was also the
+/// commit that added a row to Skylark's pricing table and moved the live
+/// version to `2026-06-24+eadff5a2` -- a provenance that never existed. Only
+/// that field changed; no `costUsd` moved, and re-deriving them against the
+/// published rates confirms it (`claude-sonnet-4-6`, 1200 in and 340 out at
+/// $3.00 and $15.00 per million, is $0.0036 + $0.0051 = $0.008700, exactly
+/// what the fixture records; the other three rows are self-hosted lanes at a
+/// real zero).
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "68084f9fc17cdd08";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte

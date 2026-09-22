@@ -512,7 +512,16 @@ mod tests {
     fn producers_fixture_path() -> Option<PathBuf> {
         if let Ok(path) = std::env::var("SKYLARK_CONFORMANCE_FIXTURE") {
             let path = PathBuf::from(path);
-            return path.is_file().then_some(path);
+            // A set-but-missing override is a misconfiguration, not an absent
+            // sibling. Skipping it would let a typo downgrade this guard to the
+            // in-repo digest check with a green suite.
+            assert!(
+                path.is_file(),
+                "SKYLARK_CONFORMANCE_FIXTURE is set to {} but no file is there; unset it to fall \
+                 back to the sibling checkout, or point it at the producer's fixture",
+                path.display()
+            );
+            return Some(path);
         }
         let sibling = Path::new(env!("CARGO_MANIFEST_DIR")).join(
             "../skylark/core/crates/skylark-daemon/src/usage/fixtures/usage_export_v1.jsonl",

@@ -3911,8 +3911,10 @@ mod tests {
         let nested_dvr = dvr.join("tokens");
         let tokens = tmp.path().join("tokens");
         std::fs::create_dir_all(dvr.join(".git")).unwrap();
+        std::fs::write(dvr.join(".git").join("HEAD"), "ref: refs/heads/main\n").unwrap();
         std::fs::create_dir_all(&nested_dvr).unwrap();
         std::fs::create_dir_all(tokens.join(".git")).unwrap();
+        std::fs::write(tokens.join(".git").join("HEAD"), "ref: refs/heads/main\n").unwrap();
 
         let nested_dvr = path_to_project_string(&nested_dvr);
         let dvr = path_to_project_string(&dvr);

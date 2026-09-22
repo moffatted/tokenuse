@@ -75,17 +75,20 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// own suite rather than quietly producing two parsers that agree about
 /// nothing.
 ///
-/// Moved from `895b289153417154` at Skylark's Phase 46 Week 106 close. The
-/// fixture's four non-null `pricingVersion` values had recorded
-/// `2026-06-24+1f4c9a70` since the commit that wrote them, which was also the
-/// commit that added a row to Skylark's pricing table and moved the live
-/// version to `2026-06-24+eadff5a2` -- a provenance that never existed. Only
-/// that field changed; no `costUsd` moved, and re-deriving them against the
-/// published rates confirms it (`claude-sonnet-4-6`, 1200 in and 340 out at
-/// $3.00 and $15.00 per million, is $0.0036 + $0.0051 = $0.008700, exactly
-/// what the fixture records; the other three rows are self-hosted lanes at a
-/// real zero).
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "68084f9fc17cdd08";
+/// Moved to `16d3e5c9a95cc6d8` at Skylark's Phase 46 Week 106b Day 3, from
+/// `68084f9fc17cdd08`. The producer's fixture moved when DeepInfra's
+/// `zai-org/GLM-5.3-Flash` rows landed and were then corrected: the live
+/// pricing version reached `2026-06-24+5dc89f85` and the fixture's four
+/// non-null `pricingVersion` values followed. This repository was not touched
+/// by that change, so its copy kept recording the superseded
+/// `2026-06-24+eadff5a2` -- the second silent divergence in three weeks, and
+/// the reason the test below now compares the producer's committed bytes
+/// directly rather than only re-deriving a digest this repository pinned to
+/// itself.
+///
+/// Only `pricingVersion` differs between the two copies; no `costUsd` moved,
+/// and the totals the fixture test asserts are unchanged.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "16d3e5c9a95cc6d8";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte
@@ -498,6 +501,60 @@ mod tests {
             CONFORMANCE_FIXTURE_DIGEST,
             "this copy of the Skylark conformance fixture drifted from the one the producing \
              repository pins"
+        );
+    }
+
+    /// The producing repository's committed copy, when this checkout can see it.
+    ///
+    /// Resolved from this crate's own manifest directory, never a hard-coded
+    /// home path, so the guard works wherever the two repositories are checked
+    /// out side by side. The override exists for a lane that keeps them apart.
+    fn producers_fixture_path() -> Option<PathBuf> {
+        if let Ok(path) = std::env::var("SKYLARK_CONFORMANCE_FIXTURE") {
+            let path = PathBuf::from(path);
+            return path.is_file().then_some(path);
+        }
+        let sibling = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../skylark/core/crates/skylark-daemon/src/usage/fixtures/usage_export_v1.jsonl",
+        );
+        sibling.is_file().then_some(sibling)
+    }
+
+    /// The two repositories' copies are the same file, or one of them is
+    /// testing a contract the other does not have.
+    ///
+    /// The pinned digest above catches a fixture that moved *and* was re-pinned
+    /// inside the same repository. It cannot catch the failure that actually
+    /// happened twice: the producing repository moves, re-pins, and the consumer
+    /// is never touched, so both suites stay green over two different contracts.
+    /// This test reads the producer's committed copy when a sibling checkout is
+    /// present and compares the bytes, so a move on either side is loud here
+    /// before the consumer re-pins.
+    ///
+    /// It skips cleanly when the sibling checkout is absent, which is its
+    /// residual bound: a machine with only this repository gets the digest check
+    /// and no cross-check.
+    #[test]
+    fn the_conformance_fixture_is_byte_identical_to_the_producers_copy() {
+        let Some(path) = producers_fixture_path() else {
+            eprintln!(
+                "skylark sibling checkout not found — cross-repository byte check skipped"
+            );
+            return;
+        };
+        let theirs = fs::read(&path).expect("the sibling fixture is readable");
+        assert_eq!(
+            fnv1a64_hex(&theirs),
+            CONFORMANCE_FIXTURE_DIGEST,
+            "the producing repository's copy at {} hashes differently from the digest this \
+             repository pins; the two repositories are testing different contracts",
+            path.display()
+        );
+        assert_eq!(
+            theirs,
+            CONFORMANCE_FIXTURE.as_bytes(),
+            "this repository's conformance fixture is not byte-identical to the producer's at {}",
+            path.display()
         );
     }
 

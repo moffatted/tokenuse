@@ -117,6 +117,8 @@ The fixture exercises every contract field, all four backend classes, all three 
 
 Updating the fixture means updating the digest in **both** repositories in the same change.
 
+That sentence is a human process, and it failed twice in three weeks: the producing repository moved, re-pinned, and this one was never touched, so both suites stayed green over two different contracts. The digest cannot catch that by construction — each repository's own suite only ever hashes its own copy. `parser::tests::the_conformance_fixture_is_byte_identical_to_the_producers_copy` closes the gap by reading the producer's committed file directly and comparing the bytes. It resolves the sibling checkout from `CARGO_MANIFEST_DIR` (never a hard-coded home path) or from `SKYLARK_CONFORMANCE_FIXTURE`, and it skips when no sibling checkout is present — which is its residual bound: a machine holding only this repository gets the digest check and no cross-check. An override that is set but points at no file is a misconfiguration and fails rather than skipping.
+
 ## Caveats
 
 - Skylark records the model identifier byte for byte, including a vendor path such as `QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ`. Normalising it upstream would destroy information a consumer can never recover.

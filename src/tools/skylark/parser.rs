@@ -95,7 +95,14 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// now names `broadcast_lag`, and two markers were added so the fixture
 /// exercises the other two causes. No usage line changed, so every call and
 /// cost total is unchanged; the fixture's lagged-row total rises from 44 to 47.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "fd41f80cee8af43e";
+///
+/// Moved to `0743e8b8170cd9bc` at Skylark's Phase 46 Week 106d Day 1, in step
+/// with the producer. Usage lines gained an additive `servedModel`, null where
+/// no response named a model, and the `vsr` line became the auto-routed shape:
+/// `model` is the requested alias `auto` and `servedModel` the model that
+/// answered. No count, cost or pricing version moved, so every total is
+/// unchanged.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "0743e8b8170cd9bc";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte
@@ -117,7 +124,13 @@ struct SourceCursor {
 pub struct SkylarkRecord {
     pub dedup_key: String,
     pub backend: String,
+    /// The model identifier the request named. For an auto-routed call this
+    /// is the alias, such as `auto`.
     pub model: String,
+    /// The model the response named as having served the call (Skylark's
+    /// additive `servedModel`, Phase 46 Week 106d Day 1). `None` when the line
+    /// predates the field or no response named a model.
+    pub served_model: Option<String>,
     pub prompt_tokens: Option<u64>,
     pub completion_tokens: Option<u64>,
     pub token_quality: TokenQuality,
@@ -274,6 +287,12 @@ fn parse_usage(value: &serde_json::Value) -> Option<SkylarkRecord> {
         None => None,
     };
     let pricing_version = as_opt_str(payload.get("pricingVersion"))?.map(str::to_string);
+    // Additive: an absent field reads as `None`, like a null, and a present
+    // value that is neither a string nor null makes the line unreadable.
+    let served_model = match payload.get("servedModel") {
+        None => None,
+        present => as_opt_str(present)?.map(str::to_string),
+    };
     // `pricingVersion` is null exactly when `costUsd` is. A figure without
     // the table that produced it asserts a provenance it does not have.
     if cost_usd.is_none() != pricing_version.is_none() {
@@ -284,6 +303,7 @@ fn parse_usage(value: &serde_json::Value) -> Option<SkylarkRecord> {
         dedup_key: stated_key.to_string(),
         backend,
         model: payload.get("model")?.as_str()?.to_string(),
+        served_model,
         prompt_tokens: as_opt_u64(payload.get("promptTokens"))?,
         completion_tokens: as_opt_u64(payload.get("completionTokens"))?,
         token_quality,
@@ -330,7 +350,13 @@ pub fn parse_export(text: &str) -> ExportParse {
 pub fn to_parsed_call(record: &SkylarkRecord, project: &str) -> ParsedCall {
     ParsedCall {
         tool: config::TOOL_ID,
-        model: record.model.clone(),
+        // The model that did the work when Skylark knows it; an auto-routed
+        // call's alias names no model and would group every routed call
+        // together under `auto`.
+        model: record
+            .served_model
+            .clone()
+            .unwrap_or_else(|| record.model.clone()),
         input_tokens: record.prompt_tokens.unwrap_or(0),
         output_tokens: record.completion_tokens.unwrap_or(0),
         cost_usd: record.cost_usd.unwrap_or(0.0),
@@ -878,6 +904,59 @@ mod tests {
             "a call not scoped to a run falls back to the emitting site rather than to an \
              empty string"
         );
+    }
+
+    /// Skylark's Phase 46 Week 106d Day 1: an auto-routed call names the
+    /// alias it was sent as in `model` and the model that answered it in
+    /// `servedModel`. The call row is attributed to the model that did the
+    /// work, and the alias is kept on the record.
+    #[test]
+    fn an_auto_routed_record_is_attributed_to_the_model_that_served_it() {
+        let parse = parse_export(CONFORMANCE_FIXTURE);
+        let routed = parse
+            .records
+            .iter()
+            .find(|r| r.model == "auto")
+            .expect("the fixture's auto-routed row");
+        assert_eq!(
+            routed.served_model.as_deref(),
+            Some("QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ")
+        );
+        let call = to_parsed_call(routed, config::DISPLAY_NAME);
+        assert_eq!(call.model, "QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ");
+
+        let unrouted = parse
+            .records
+            .iter()
+            .find(|r| r.served_model.is_none())
+            .expect("a row no response named a model for");
+        assert_eq!(
+            to_parsed_call(unrouted, config::DISPLAY_NAME).model,
+            unrouted.model,
+            "with no served model the requested one stands"
+        );
+    }
+
+    /// `servedModel` is additive: a line from before it existed still reads,
+    /// and a present value that is not a string or null is not a model.
+    #[test]
+    fn a_served_model_is_optional_and_typed() {
+        let line = CONFORMANCE_FIXTURE
+            .lines()
+            .find(|l| l.contains("\"model\":\"auto\""))
+            .expect("the auto-routed line");
+        let mut value: serde_json::Value = serde_json::from_str(line).expect("JSON");
+        value["event"]["payload"]
+            .as_object_mut()
+            .expect("payload")
+            .remove("servedModel");
+        let legacy = parse_export(&serde_json::to_string(&value).expect("JSON"));
+        assert_eq!(legacy.skipped_lines, 0);
+        assert_eq!(legacy.records[0].served_model, None);
+
+        value["event"]["payload"]["servedModel"] = serde_json::Value::from(7);
+        let wrong = parse_export(&serde_json::to_string(&value).expect("JSON"));
+        assert_eq!(wrong.skipped_lines, 1, "a numeric servedModel is not a model");
     }
 
     #[test]

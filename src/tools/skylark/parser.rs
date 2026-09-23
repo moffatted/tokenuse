@@ -88,7 +88,14 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 ///
 /// Only `pricingVersion` differs between the two copies; no `costUsd` moved,
 /// and the totals the fixture test asserts are unchanged.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "16d3e5c9a95cc6d8";
+///
+/// Moved to `fd41f80cee8af43e` at Skylark's Phase 46 Week 106c Day 4, in step
+/// with the producer. Gap lines gained an additive `cause` field
+/// (`broadcast_lag`, `write_failure` or `shutdown_drain`): the existing marker
+/// now names `broadcast_lag`, and two markers were added so the fixture
+/// exercises the other two causes. No usage line changed, so every call and
+/// cost total is unchanged; the fixture's lagged-row total rises from 44 to 47.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "fd41f80cee8af43e";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte
@@ -699,8 +706,10 @@ mod tests {
     fn a_gap_marker_is_surfaced_rather_than_swallowed() {
         let parse = parse_export(CONFORMANCE_FIXTURE);
         assert_eq!(
-            parse.lagged_rows, 44,
-            "the fixture's gap marker records 44 rows the daemon lost before the sink saw them"
+            parse.lagged_rows, 47,
+            "the fixture's three gap markers record 44 rows lost to broadcast lag, 2 to failed \
+             appends and 1 to the shutdown drain -- a cause this adapter reads past rather than \
+             refusing the line over"
         );
         assert_eq!(
             parse.skipped_lines, 0,
@@ -717,7 +726,7 @@ mod tests {
         let parse = parse_export(&text);
         assert_eq!(parse.records.len(), 6, "every intact record still reads");
         assert_eq!(parse.skipped_lines, 1);
-        assert_eq!(parse.lagged_rows, 44);
+        assert_eq!(parse.lagged_rows, 47);
 
         // ... and the file parser stops before it, so the cursor does not
         // advance past a line that is not finished being written.
@@ -811,7 +820,10 @@ mod tests {
         let first = parse_session_with_cursor(&source, &mut seen, None).expect("first parse");
         let cursor = first.cursor.expect("a cursor");
 
-        let rewritten = CONFORMANCE_FIXTURE.replace(r#""lagged":44"#, r#""lagged":45"#);
+        let rewritten = CONFORMANCE_FIXTURE.replace(
+            r#""lagged":1,"detectedAtUtc":1789776360"#,
+            r#""lagged":7,"detectedAtUtc":1789776360"#,
+        );
         assert_eq!(
             rewritten.len(),
             CONFORMANCE_FIXTURE.len(),

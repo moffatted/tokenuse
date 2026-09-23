@@ -53,10 +53,12 @@ Two contract versions appear on every line and they are deliberately different s
 ### A `gap` line
 
 ```json
-{"record":"gap","contractVersion":"skylark-model-usage-v1","lagged":44,"detectedAtUtc":1789776300}
+{"record":"gap","contractVersion":"skylark-model-usage-v1","lagged":44,"detectedAtUtc":1789776300,"cause":"broadcast_lag"}
 ```
 
 Skylark's sink subscribes to a bounded broadcast channel. A subscriber that falls behind is told how many events it missed, and the sink writes that number to the log rather than losing it silently. `ExportParse::lagged_rows` sums these. **Totals over a file with a non-zero gap are a floor, not a figure** — the marker exists so "we stopped listening" is not read as "nothing happened".
+
+`cause` says which loss the marker counts: `broadcast_lag` (the sink fell behind and never saw the rows), `write_failure` (it saw them and the appends failed) or `shutdown_drain` (it saw and queued them, and the bounded drain at daemon shutdown ran out before they were written). The field is additive and Skylark does not require it: a marker written before it existed has none. This adapter sums `lagged` across every cause and does not break the total down by cause.
 
 ## Backend coverage
 
@@ -113,7 +115,7 @@ A final line with no newline is the half-written object a daemon killed mid-writ
 
 `src/tools/skylark/fixtures/usage_export_v1.jsonl` is a byte-for-byte copy of the fixture committed in the Skylark repository. Both repositories pin the same FNV-1a 64 digest over it (`CONFORMANCE_FIXTURE_DIGEST`), which is what makes two copies the same file across two independently released repositories with no shared checkout: a byte that moves in either fails that repository's own suite rather than quietly producing two parsers that agree about nothing.
 
-The fixture exercises every contract field, all four backend classes, all three token qualities, all three cost states, and a gap marker. Its expected totals — six calls, 2046 input tokens, 1189 output tokens, four priced rows, two unpriced, $0.0087 of spend, 44 lagged rows — are asserted in `parser::tests`.
+The fixture exercises every contract field, all four backend classes, all three token qualities, all three cost states, and a gap marker for each of the three causes. Its expected totals — six calls, 2046 input tokens, 1189 output tokens, four priced rows, two unpriced, $0.0087 of spend, 47 lagged rows — are asserted in `parser::tests`.
 
 Updating the fixture means updating the digest in **both** repositories in the same change.
 

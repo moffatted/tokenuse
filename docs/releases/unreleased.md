@@ -8,7 +8,7 @@ Changes that should be included in the next release go here. Keep this file curr
 
 ## Changed
 
-No changes recorded yet.
+- **Skylark gap markers name their cause.** The Skylark export's `gap` lines now carry an additive `cause` field (`broadcast_lag`, `write_failure` or `shutdown_drain`). The adapter still sums `lagged` across every cause, so no total changes meaning; the committed conformance fixture and its digest moved in step with the producer. See [docs/development/tools/skylark.md](../development/tools/skylark.md).
 
 ## Removed
 

@@ -119,7 +119,15 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// and ignores it as it ignores any unknown field, so no row is dropped. The
 /// producer's pricing table also moved, so the priced lines now record
 /// `2026-06-24+86ddf623`. No count or cost moved, so every total is unchanged.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "73dd09af5ecae877";
+///
+/// Moved to `2cfbda5252ac2295` on 2026-09-25, in step with the producer, when
+/// Skylark's owner allowed an estimated cost: a reported model with no price
+/// row of its own is priced at the requested model's row, of the same
+/// provider. Usage lines gained the additive `costEstimated`: `false` on every
+/// priced line and null on every unpriced one. This reader does not consume it
+/// yet, and ignores it as it ignores any unknown field, so no row is dropped.
+/// No pricing version, count or cost moved, so every total is unchanged.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "2cfbda5252ac2295";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte

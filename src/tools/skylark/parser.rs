@@ -1059,4 +1059,66 @@ mod tests {
             "an estimate least of all"
         );
     }
+
+    /// The per-model fixture, shared with the producing repository (Skylark Phase
+    /// 46 Week 106f Day 4). Skylark's usage card and this adapter attribute each
+    /// call to the same key, `servedModel` falling back to `model`, and each side
+    /// asserts the same per-model keys and counts against this file.
+    const MODELS_FIXTURE: &str = include_str!("fixtures/usage_models_v1.jsonl");
+
+    /// FNV-1a 64 over [`MODELS_FIXTURE`], pinned identically in the producer.
+    const MODELS_FIXTURE_DIGEST: &str = "c30b42e9bc752f9b";
+
+    /// The per-model breakdown the producer's usage card gives for the same
+    /// fixture (`usage::card::tests::MODELS_FIXTURE_EXPECTED` in Skylark):
+    /// key, calls, input tokens, output tokens, in key order.
+    const MODELS_FIXTURE_EXPECTED: [(&str, u64, u64, u64); 4] = [
+        ("QuantTrio/Qwen3-Coder-30B-A3B-Instruct-AWQ", 2, 141, 17),
+        ("auto", 1, 40, 5),
+        ("claude-haiku-4-5-20251001", 1, 300, 60),
+        ("claude-sonnet-4-6", 1, 1200, 340),
+    ];
+
+    #[test]
+    fn the_shared_model_fixture_matches_its_pinned_digest() {
+        assert_eq!(fnv1a64_hex(MODELS_FIXTURE.as_bytes()), MODELS_FIXTURE_DIGEST);
+    }
+
+    /// One grouping key on both sides of the repository boundary: the model
+    /// that served the call, falling back to the one requested. A routed call
+    /// with no served model stays under its alias, and a dated id is its own
+    /// key rather than being folded into its alias.
+    #[test]
+    fn the_shared_model_fixture_groups_per_model_as_the_producers_card_does() {
+        let parse = parse_export(MODELS_FIXTURE);
+        assert_eq!(parse.skipped_lines, 0, "every fixture line must be readable");
+        let mut groups: BTreeMap<String, (u64, u64, u64)> = BTreeMap::new();
+        for record in &parse.records {
+            let call = to_parsed_call(record, config::DISPLAY_NAME);
+            let entry = groups.entry(call.model).or_default();
+            entry.0 += 1;
+            entry.1 += call.input_tokens;
+            entry.2 += call.output_tokens;
+        }
+        let actual: Vec<(&str, u64, u64, u64)> = groups
+            .iter()
+            .map(|(key, (calls, input, output))| (key.as_str(), *calls, *input, *output))
+            .collect();
+        assert_eq!(actual, MODELS_FIXTURE_EXPECTED.to_vec());
+    }
+
+    /// The producer's committed copy, byte for byte, when a sibling checkout
+    /// is present. Skips cleanly without one, like the conformance check.
+    #[test]
+    fn the_shared_model_fixture_is_byte_identical_to_the_producers_copy() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../skylark");
+        if !root.is_dir() {
+            eprintln!("skylark sibling checkout not found — cross-repository byte check skipped");
+            return;
+        }
+        let path = root.join("core/crates/skylark-daemon/src/usage/fixtures/usage_models_v1.jsonl");
+        let theirs = fs::read(&path)
+            .unwrap_or_else(|_| panic!("skylark is checked out beside this repository but has no {}", path.display()));
+        assert_eq!(theirs, MODELS_FIXTURE.as_bytes(), "the two repositories' per-model fixtures differ");
+    }
 }

@@ -102,7 +102,16 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// `model` is the requested alias `auto` and `servedModel` the model that
 /// answered. No count, cost or pricing version moved, so every total is
 /// unchanged.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "0743e8b8170cd9bc";
+///
+/// Moved to `23a4ea93be256b0d` at Skylark's Phase 46 Week 106f Day 2, in step
+/// with the producer. Usage lines gained three additive prompt-cache counts,
+/// `cacheReadTokens`, `cacheWrite5mTokens` and `cacheWrite1hTokens`: zero on
+/// the Sonnet line, which reported them, and null elsewhere. This reader does
+/// not consume them yet, and ignores them as it ignores any unknown field, so
+/// no row is dropped. The producer's pricing table also moved, so the priced
+/// lines now record `2026-06-24+eae90d17`. No count or cost moved, so every
+/// total is unchanged.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "23a4ea93be256b0d";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte

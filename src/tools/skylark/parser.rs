@@ -133,7 +133,17 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// producer's pricing table moved with it, so the priced lines now record
 /// `2026-06-24+9f116474`. No field was added and no count or cost moved, so
 /// every total is unchanged.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "8ab7ec593d69d617";
+///
+/// Moved to `a5cfc30b96c5441a` on 2026-09-26, in step with the producer
+/// (Skylark Phase 46 Week 106h Day 4). Skylark's rate refresh deleted its
+/// Gemini 1.5 rows and re-dated its table, so the priced lines now record
+/// `2026-09-26+b86b9ab1`, and two usage lines were added so the fixture
+/// exercises both certainty flags set: a `deepseek-flash` call with
+/// `costUpperBound: true` and a `deepseek-flash-20261001` call with
+/// `costEstimated: true`. This reader still ignores both flags. The totals
+/// become eight calls, 3746 input and 1499 output tokens, six priced and two
+/// unpriced, and $0.0095838 of spend; the lagged-row total stays 47.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "a5cfc30b96c5441a";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte
@@ -641,10 +651,10 @@ mod tests {
         );
 
         let totals = totals(&parse.records);
-        assert_eq!(totals["calls"], 6);
-        assert_eq!(totals["input_tokens"], 2046);
-        assert_eq!(totals["output_tokens"], 1189);
-        assert_eq!(totals["priced"], 4);
+        assert_eq!(totals["calls"], 8);
+        assert_eq!(totals["input_tokens"], 3746);
+        assert_eq!(totals["output_tokens"], 1499);
+        assert_eq!(totals["priced"], 6);
         assert_eq!(totals["unpriced"], 2);
 
         // Every backend class the export claims to cover.
@@ -717,8 +727,8 @@ mod tests {
         // The spend total is the priced rows and nothing else.
         let total: f64 = parse.records.iter().filter_map(|r| r.cost_usd).sum();
         assert!(
-            (total - 0.0087).abs() < 1e-9,
-            "only the one priced non-zero call contributes money; got {total}"
+            (total - 0.0095838).abs() < 1e-9,
+            "only the three priced non-zero calls contribute money; got {total}"
         );
     }
 
@@ -781,7 +791,7 @@ mod tests {
         let mut text = CONFORMANCE_FIXTURE.to_string();
         text.push_str("{\"record\":\"usage\",\"contractVer");
         let parse = parse_export(&text);
-        assert_eq!(parse.records.len(), 6, "every intact record still reads");
+        assert_eq!(parse.records.len(), 8, "every intact record still reads");
         assert_eq!(parse.skipped_lines, 1);
         assert_eq!(parse.lagged_rows, 47);
 
@@ -792,7 +802,7 @@ mod tests {
         let mut seen = HashSet::new();
         let parsed =
             parse_session_with_cursor(&source, &mut seen, None).expect("a truncated tail parses");
-        assert_eq!(parsed.calls.len(), 6);
+        assert_eq!(parsed.calls.len(), 8);
         let cursor: SourceCursor =
             serde_json::from_str(&parsed.cursor.expect("a cursor")).expect("cursor JSON");
         assert_eq!(
@@ -854,8 +864,8 @@ mod tests {
         assert_eq!(second.resumed_files, 1);
         assert_eq!(
             second.calls.len(),
-            3,
-            "only the three appended usage rows, not the whole file again"
+            5,
+            "only the five appended usage rows, not the whole file again"
         );
         fs::remove_dir_all(&dir).ok();
     }
@@ -896,7 +906,7 @@ mod tests {
             second.resumed_files, 0,
             "the probe must reject the stale cursor"
         );
-        assert_eq!(second.calls.len(), 6, "and the file is read whole");
+        assert_eq!(second.calls.len(), 8, "and the file is read whole");
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -909,7 +919,7 @@ mod tests {
         let source = fixture_source(&dir, &doubled);
         let mut seen = HashSet::new();
         let calls = parse_session(&source, &mut seen).expect("parse");
-        assert_eq!(calls.len(), 6, "twelve lines, six calls");
+        assert_eq!(calls.len(), 8, "sixteen usage lines, eight calls");
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -1016,7 +1026,7 @@ mod tests {
     fn a_line_that_is_not_json_at_all_costs_only_itself() {
         let text = format!("not json\n{CONFORMANCE_FIXTURE}");
         let parse = parse_export(&text);
-        assert_eq!(parse.records.len(), 6);
+        assert_eq!(parse.records.len(), 8);
         assert_eq!(parse.skipped_lines, 1);
     }
 

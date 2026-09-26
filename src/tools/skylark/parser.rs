@@ -127,7 +127,13 @@ pub const CONFORMANCE_FIXTURE: &str = include_str!("fixtures/usage_export_v1.jso
 /// priced line and null on every unpriced one. This reader does not consume it
 /// yet, and ignores it as it ignores any unknown field, so no row is dropped.
 /// No pricing version, count or cost moved, so every total is unchanged.
-pub const CONFORMANCE_FIXTURE_DIGEST: &str = "2cfbda5252ac2295";
+///
+/// Moved to `8ab7ec593d69d617` on 2026-09-25, in step with the producer, when
+/// Skylark's owner priced DeepInfra at its list rate as an upper bound. The
+/// producer's pricing table moved with it, so the priced lines now record
+/// `2026-06-24+9f116474`. No field was added and no count or cost moved, so
+/// every total is unchanged.
+pub const CONFORMANCE_FIXTURE_DIGEST: &str = "8ab7ec593d69d617";
 
 /// Persisted per-source resume cursor. A source is one log file, and a
 /// rotated log file never gains a byte again, which is what makes a byte
